@@ -201,7 +201,10 @@ window.addEventListener("keydown", (event) => {
 renderPosts();
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js")
-    .then(() => console.log("Service Worker registered"))
-    .catch((error) => console.log("Service Worker failed:", error));
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("/Blog.website/sw.js")
+      .then(() => console.log("Service Worker Registered"))
+      .catch((err) => console.log("SW failed:", err));
+  });
 }
