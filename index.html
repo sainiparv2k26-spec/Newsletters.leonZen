@@ -2,105 +2,109 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="description" content="Blogs, newsletters and journal entries about life, ideas and growth.">
-<meta name="keywords" content="blog, journal, newsletter, personal writing">
-<meta name="Parv Saini" content="Blog">
-  <meta name="google-site-verification" content="plo2r8vubmlzKn_9TQPq8-HlsRffadXIIquN08ryHck" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Quiet Letters</title>
+
+  <title>YYC Daily | Calgary Newsletter</title>
   <meta
     name="description"
-    content="A minimal blog, newsletter, and journal website built as a static site."
+    content="YYC Daily is a Calgary-focused newsletter featuring local perspectives, culture, cannabis commentary, and thoughtful writing from YYC."
   />
+  <meta
+    name="keywords"
+    content="YYC newsletter, Calgary newsletter, cannabis Calgary, Calgary culture, daily newsletter, YYC writing"
+  />
+  <meta name="author" content="Leon Zen" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:wght@500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap"
     rel="stylesheet"
   />
+
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="site-header">
     <div class="container nav">
       <a href="#top" class="brand">
-        <span class="brand-mark">QL</span>
-        <div>
-          <h1>Quiet Letters</h1>
-          <p>Blogs, newsletters, and journal notes</p>
+        <div class="brand-badge">YYC</div>
+        <div class="brand-text">
+          <h1>YYC Daily</h1>
+          <p>Calgary newsletters, perspectives, and culture</p>
         </div>
       </a>
 
       <nav class="nav-links">
         <a href="#about">About</a>
-        <a href="#posts">Posts</a>
+        <a href="#newsletters">Newsletters</a>
       </nav>
     </div>
   </header>
 
   <main id="top">
-    <section class="hero section">
+    <section class="hero">
       <div class="container hero-grid">
-        <div class="hero-copy">
-          <p class="eyebrow">A calm space for daily writing</p>
-          <h2>Thoughtful posts, newsletters, and journal reflections in one place.</h2>
+        <div class="hero-content">
+          <span class="eyebrow">Daily YYC newsletter</span>
+          <h2>Sharp Calgary perspectives, delivered through thoughtful writing.</h2>
           <p class="hero-text">
-            A clean, read-only public website where ideas, updates, and personal notes
-            are published in a simple reading experience.
+            YYC Daily is a read-only public newsletter website focused on Calgary
+            culture, local perspective, cannabis commentary, and meaningful ideas.
           </p>
+
           <div class="hero-actions">
-            <a class="btn btn-dark" href="#posts">Read Posts</a>
-            <a class="btn btn-light" href="#about">Learn More</a>
+            <a href="#newsletters" class="btn btn-dark">Read Latest</a>
+            <a href="#about" class="btn btn-light">About YYC Daily</a>
           </div>
         </div>
 
-        <aside class="hero-panel">
-          <h3>Inside this website</h3>
+        <aside class="hero-card">
+          <h3>What this site publishes</h3>
           <ul>
-            <li>Blog posts with longer thoughts</li>
-            <li>Newsletters with short updates</li>
-            <li>Journal entries and personal notes</li>
-            <li>Fast, responsive reading on any device</li>
+            <li>Daily or weekly YYC newsletters</li>
+            <li>Cannabis market perspectives</li>
+            <li>Local culture and trend writing</li>
+            <li>Thoughtful editorial-style pieces</li>
           </ul>
         </aside>
       </div>
     </section>
 
-    <section id="about" class="section about">
+    <section id="about" class="about-section">
       <div class="container about-grid">
         <div>
-          <p class="eyebrow">About</p>
-          <h2>A minimal publishing site built for clarity.</h2>
+          <span class="eyebrow">About</span>
+          <h2>A Calgary newsletter space built for clarity and consistency.</h2>
           <p>
-            This website is designed as a static publishing space for blogs,
-            newsletters, and journal entries. Public visitors can only read posts.
-            New content is added manually by editing a simple JavaScript array.
+            This website is designed as a clean, static newsletter publication for
+            YYC-focused writing. Visitors can read published pieces, while all new
+            newsletters are added manually by editing the site code.
           </p>
           <p>
-            It is lightweight, GitHub Pages-friendly, and easy to maintain without
-            any backend or dashboard.
+            It is simple, fast, lightweight, and ideal for GitHub Pages hosting.
           </p>
         </div>
 
         <div class="about-card">
-          <h3>Static site setup</h3>
+          <h3>How publishing works</h3>
           <p>
-            No backend, no login, no admin panel. Just edit the post data in
-            <strong>script.js</strong>, push to GitHub, and your updates go live.
+            To publish a new newsletter, just edit the <strong>posts</strong> array
+            in <strong>script.js</strong>, save, commit, and push to GitHub.
           </p>
         </div>
       </div>
     </section>
 
-    <section id="posts" class="section posts-section">
+    <section id="newsletters" class="posts-section">
       <div class="container">
         <div class="section-head">
           <div>
-            <p class="eyebrow">Posts</p>
-            <h2>Latest writing</h2>
+            <span class="eyebrow">Newsletters</span>
+            <h2>Latest YYC writing</h2>
           </div>
-          <p class="section-subtext">
-            Search, filter by category, and browse posts sorted by newest first.
+          <p class="section-note">
+            Search newsletters and browse the newest writing first.
           </p>
         </div>
 
@@ -109,22 +113,15 @@
             <input
               type="text"
               id="searchInput"
-              placeholder="Search posts..."
-              aria-label="Search posts"
+              placeholder="Search newsletters..."
+              aria-label="Search newsletters"
             />
-          </div>
-
-          <div class="filters" aria-label="Filter posts by category">
-            <button class="filter-btn active" data-category="all">All</button>
-            <button class="filter-btn" data-category="blog">Blogs</button>
-            <button class="filter-btn" data-category="newsletter">Newsletters</button>
-            <button class="filter-btn" data-category="journal">Journal</button>
           </div>
         </div>
 
-        <div class="results-bar">
-          <p id="resultsCount">0 posts</p>
-          <p class="sort-note">Sorted by newest</p>
+        <div class="results-row">
+          <p id="resultsCount">0 newsletters</p>
+          <p>Sorted by newest</p>
         </div>
 
         <div id="postsGrid" class="posts-grid"></div>
@@ -133,15 +130,10 @@
   </main>
 
   <div id="postModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-overlay" id="modalOverlay"></div>
+    <div id="modalOverlay" class="modal-overlay"></div>
 
-    <div
-      class="modal-content"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modalTitle"
-    >
-      <button id="closeModalBtn" class="close-modal" aria-label="Close post">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button id="closeModalBtn" class="close-modal" aria-label="Close newsletter">
         &times;
       </button>
 
@@ -151,8 +143,8 @@
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <p>© 2026 Quiet Letters</p>
-      <p>Static blog, newsletter, and journal site</p>
+      <p>© 2026 YYC Daily</p>
+      <p>Written by Leon Zen</p>
     </div>
   </footer>
 

@@ -1,23 +1,19 @@
 /*
-  HOW TO ADD A NEW POST:
+  HOW TO ADD A NEW NEWSLETTER
 
   1. Copy one object inside the posts array.
   2. Change the id to a new unique number.
-  3. Set the category to one of:
-     - "blog"
-     - "newsletter"
-     - "journal"
-  4. Use date format: "YYYY-MM-DD" for correct newest sorting.
-  5. image is optional. Leave it as "" if you do not want one.
+  3. Keep date format as YYYY-MM-DD so newest sorting works.
+  4. Add title, excerpt, full content, and optional image.
+  5. Save, commit, and push to GitHub.
 
   Example:
   {
-    id: 5,
-    title: "My New Post",
-    category: "blog",
+    id: 2,
+    title: "Your New YYC Newsletter",
     date: "2026-04-21",
-    excerpt: "A short summary shown on the card.",
-    content: `Your full post goes here.`,
+    excerpt: "A short preview shown on the card.",
+    content: `Write the full newsletter here.`,
     image: ""
   }
 */
@@ -25,73 +21,30 @@
 const posts = [
   {
     id: 1,
-    title: "Why Daily Writing Brings Clarity",
-    category: "blog",
+    title: "YYC Cannabis Market Perspective: Chasing THC or Chasing Quality?",
     date: "2026-04-20",
     excerpt:
-      "A reflection on how regular writing creates focus, self-awareness, and a steadier inner voice.",
-    content: `Writing every day changes the way thoughts settle inside you.
+      "In Calgary’s growing cannabis scene, THC percentages dominate the conversation, but true quality goes far beyond potency alone.",
+    content: `In Calgary’s growing cannabis scene, a clear trend has taken over: everyone’s chasing high THC numbers. Walk into almost any dispensary, and the first question you’ll hear is, “What’s the strongest you’ve got?” But in this rush for potency, something important is being overlooked: the quality and origin of the plant itself.
 
-At first, it may feel like you are only recording moments. But over time, patterns appear. You notice what matters to you, what keeps returning, and what quietly shapes your life.
+THC percentage has become a marketing tool, not necessarily a measure of a better experience. A higher number on the label doesn’t guarantee richer flavor, smoother smoke, or a more balanced effect. In fact, many high-THC products sacrifice terpene profiles — the compounds responsible for aroma, taste, and the nuanced effects that make each strain unique.
 
-A daily writing habit does not need to be perfect to be meaningful. Even small entries create momentum. One honest paragraph can be enough.
+What Calgary consumers should be paying closer attention to is how the cannabis is grown. Sun-grown cannabis, cultivated outdoors under natural light, often develops more complex terpene profiles and a fuller expression of the plant’s natural characteristics. Unlike heavily controlled indoor environments focused on maximizing THC, sun-grown plants benefit from real soil, fresh air, and the natural rhythm of the seasons.
 
-Clarity often comes after expression. When something is written down, it becomes easier to understand. That is one reason writing remains one of the simplest and strongest personal tools.`,
-    image: "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=1200&q=80"
-  },
-  {
-    id: 2,
-    title: "Sunday Letter: Small Progress Still Counts",
-    category: "newsletter",
-    date: "2026-04-18",
-    excerpt:
-      "A short note on patience, consistency, and why quiet progress deserves respect.",
-    content: `Welcome to this week's letter.
+This isn’t just about taste — it’s about experience. A well-grown, terpene-rich strain with moderate THC can offer a more enjoyable, balanced high than a harsh, overly potent alternative. It’s similar to choosing quality coffee or wine; the story behind how it’s produced matters just as much as the final number on the label.
 
-Not every week arrives with visible milestones. Some weeks are quieter than others. But quiet progress still matters.
+As YYC continues to build its cannabis culture, there’s an opportunity to shift the conversation. Instead of asking for the highest THC, ask about terpene profiles, growing methods, and overall quality. Support producers who prioritize craft, sustainability, and the natural integrity of the plant.
 
-A routine that looks ordinary from the outside may be the very thing holding your life together. Reading a few pages, writing one post, making one better choice, or staying consistent with something small can shape more than you realize.
+Because at the end of the day, cannabis isn’t just about getting “higher” — it’s about getting better.
 
-Keep going with what is steady. Slow progress still counts.`,
-    image: ""
-  },
-  {
-    id: 3,
-    title: "Journal Note on an Uncomplicated Evening",
-    category: "journal",
-    date: "2026-04-15",
-    excerpt:
-      "A journal entry about peace, silence, and letting the day end without pressure.",
-    content: `Tonight felt simple in the best way.
-
-The room was quiet. My thoughts were not especially dramatic. Nothing huge happened, but something in me softened. I think I needed that.
-
-There is a kind of healing in evenings that ask nothing from you. No performance, no urgency, no need to prove that the day was significant.
-
-Sometimes peace is enough reason to remember a moment.`,
-    image: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80"
-  },
-  {
-    id: 4,
-    title: "How I Keep a Publishing Rhythm Without Burnout",
-    category: "blog",
-    date: "2026-04-11",
-    excerpt:
-      "A practical approach to posting regularly without turning writing into pressure.",
-    content: `Consistency becomes easier when the system stays simple.
-
-Instead of forcing every post to be big, polished, or deeply original, it helps to think in formats. Some days can hold a longer blog post. Other days may only need a short letter or a quiet journal note.
-
-When you allow different types of writing to coexist, posting starts to feel lighter. A rhythm forms. You stop waiting for perfect conditions and begin working with what is available.
-
-That is often how sustainable publishing begins.`,
-    image: ""
+— Leon Zen
+YYC Writer`,
+    image: "https://images.unsplash.com/photo-1603909223429-69bb7101f420?auto=format&fit=crop&w=1400&q=80"
   }
 ];
 
 const postsGrid = document.getElementById("postsGrid");
 const searchInput = document.getElementById("searchInput");
-const filterButtons = document.querySelectorAll(".filter-btn");
 const resultsCount = document.getElementById("resultsCount");
 
 const postModal = document.getElementById("postModal");
@@ -99,7 +52,6 @@ const modalArticle = document.getElementById("modalArticle");
 const closeModalBtn = document.getElementById("closeModalBtn");
 const modalOverlay = document.getElementById("modalOverlay");
 
-let activeCategory = "all";
 let searchTerm = "";
 
 function formatDisplayDate(dateString) {
@@ -121,34 +73,28 @@ function getFilteredPosts() {
   return [...posts]
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .filter((post) => {
-      const matchesCategory =
-        activeCategory === "all" || post.category === activeCategory;
-
       const searchableText = `
         ${post.title}
-        ${post.category}
         ${post.excerpt}
         ${post.content}
       `.toLowerCase();
 
-      const matchesSearch = searchableText.includes(searchTerm.toLowerCase());
-
-      return matchesCategory && matchesSearch;
+      return searchableText.includes(searchTerm.toLowerCase());
     });
 }
 
 function renderPosts() {
   const filteredPosts = getFilteredPosts();
 
-  resultsCount.textContent = `${filteredPosts.length} post${
+  resultsCount.textContent = `${filteredPosts.length} newsletter${
     filteredPosts.length === 1 ? "" : "s"
   }`;
 
   if (filteredPosts.length === 0) {
     postsGrid.innerHTML = `
       <div class="empty-state">
-        <h3>No posts found</h3>
-        <p>Try a different search word or category.</p>
+        <h3>No newsletters found</h3>
+        <p>Try a different search word.</p>
       </div>
     `;
     return;
@@ -168,14 +114,15 @@ function renderPosts() {
         <article class="post-card">
           ${imageMarkup}
           <div class="post-body">
+            <span class="post-label">Newsletter</span>
+
             <div class="post-meta">
-              <span class="category-tag ${escapeHtml(post.category)}">${escapeHtml(post.category)}</span>
               <span class="post-date">${formatDisplayDate(post.date)}</span>
             </div>
 
             <h3 class="post-title">${escapeHtml(post.title)}</h3>
             <p class="post-excerpt">${escapeHtml(post.excerpt)}</p>
-            <button class="read-btn" data-post-id="${post.id}">Read More →</button>
+            <button class="read-btn" data-post-id="${post.id}">Read Full Issue →</button>
           </div>
         </article>
       `;
@@ -203,10 +150,7 @@ function openPostModal(postId) {
     : "";
 
   modalArticle.innerHTML = `
-    <div class="modal-meta">
-      <span class="category-tag ${escapeHtml(post.category)}">${escapeHtml(post.category)}</span>
-    </div>
-
+    <span class="modal-label">Newsletter</span>
     <h2 id="modalTitle" class="modal-title">${escapeHtml(post.title)}</h2>
     <p class="modal-date">${formatDisplayDate(post.date)}</p>
     ${imageMarkup}
@@ -227,15 +171,6 @@ function closePostModal() {
 searchInput.addEventListener("input", (event) => {
   searchTerm = event.target.value.trim();
   renderPosts();
-});
-
-filterButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    filterButtons.forEach((btn) => btn.classList.remove("active"));
-    button.classList.add("active");
-    activeCategory = button.dataset.category;
-    renderPosts();
-  });
 });
 
 closeModalBtn.addEventListener("click", closePostModal);
