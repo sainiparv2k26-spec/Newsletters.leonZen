@@ -1,12 +1,26 @@
 (() => {
   "use strict";
 
+  if (window.__YYC_DAILY_APP_INITIALIZED__) return;
+  window.__YYC_DAILY_APP_INITIALIZED__ = true;
+
   const CONFIG = {
+    appName: "YYC Daily",
+    locale: "en-CA",
+    timeZone: "America/Edmonton",
+    wordsPerMinute: 220,
+    searchDebounceMs: 180,
+    statusResetMs: 2600,
+    submitCooldownMs: 1400,
+    backToTopOffset: 500,
+    stickyCtaOffset: 700,
+    focusableSelector:
+      'a[href], area[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     storageKeys: {
       theme: "yyc-theme",
       bookmarks: "yyc-bookmarks",
       announcementDismissed: "yyc-announcement-dismissed",
-      signupPrefs: "yyc-signup-prefs"
+      signupPrefs: "yyc-signup-prefs-v2"
     },
     selectors: {
       progressBar: "#progressBar",
@@ -29,11 +43,24 @@
       modalArticle: "#modalArticle",
       closeModalBtn: "#closeModalBtn"
     },
-    focusableSelector:
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    topicAliasMap: {
+      local: "Calgary News",
+      "calgary news": "Calgary News",
+      calgary: "Calgary News",
+      alberta: "Alberta",
+      canada: "Canada",
+      events: "Events",
+      event: "Events",
+      business: "Business",
+      lifestyle: "Lifestyle",
+      deals: "Deals",
+      tech: "Tech",
+      technology: "Tech",
+      culture: "Culture"
+    }
   };
 
-  const rawPosts = [
+  const RAW_POSTS = [
     {
       id: 1,
       title: "YYC Cannabis Market Perspective: Chasing THC or Chasing Quality?",
@@ -122,7 +149,8 @@ YYC Writer`,
     }
   ];
 
-  const dom = {};
+  const dom = Object.create(null);
+
   const state = {
     posts: [],
     filteredPosts: [],
@@ -131,14 +159,22 @@ YYC Writer`,
     activePost: null,
     lastFocusedElement: null,
     bookmarks: new Set(),
-    theme: "dark"
+    theme: "dark",
+    statusTimer: 0,
+    searchTimer: 0,
+    submitTimer: 0,
+    scrollTicking: false,
+    listenersAbortController: null,
+    reducedMotion:
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
   };
 
   const safeStorage = {
     get(key, fallback) {
       try {
-        const value = window.localStorage.getItem(key);
-        return value ? JSON.parse(value) : fallback;
+        const raw = window.localStorage.getItem(key);
+        return raw === null ? fallback : JSON.parse(raw);
       } catch {
         return fallback;
       }
@@ -161,48 +197,88 @@ YYC Writer`,
     }
   };
 
-  function qs(selector) {
-    return document.querySelector(selector);
+  function qs(selector, root = document) {
+    if (!selector || !root || typeof root.querySelector !== "function") return null;
+    try {
+      return root.querySelector(selector);
+    } catch {
+      return null;
+    }
   }
 
   function qsa(selector, root = document) {
-    return Array.from(root.querySelectorAll(selector));
+    if (!selector || !root || typeof root.querySelectorAll !== "function") return [];
+    try {
+      return Array.from(root.querySelectorAll(selector));
+    } catch {
+      return [];
+    }
   }
 
-  function cacheDom() {
-    Object.entries(CONFIG.selectors).forEach(([key, selector]) => {
-      dom[key] = qs(selector);
-    });
+  function isHTMLElement(value) {
+    return value instanceof HTMLElement;
   }
 
   function normalizeText(value) {
     return String(value ?? "")
+      .normalize("NFKC")
       .toLowerCase()
       .replace(/\s+/g, " ")
       .trim();
   }
 
-  function slugify(value) {
-    return String(value ?? "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
+  function normalizeWhitespace(value) {
+    return String(value ?? "").replace(/\s+/g, " ").trim();
   }
 
-  function formatDateUS(dateString) {
-    const date = new Date(`${dateString}T00:00:00`);
-    if (Number.isNaN(date.getTime())) return dateString;
+  function slugify(value) {
+    return String(value ?? "")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80);
+  }
 
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric"
-    });
+  function canonicalTopic(value) {
+    const raw = normalizeWhitespace(value);
+    const mapped = CONFIG.topicAliasMap[normalizeText(raw)];
+    return mapped || raw || "Calgary News";
+  }
+
+  function formatDateCA(dateString) {
+    const date = new Date(`${String(dateString)}T12:00:00`);
+    if (Number.isNaN(date.getTime())) return String(dateString || "");
+    try {
+      return new Intl.DateTimeFormat(CONFIG.locale, {
+        timeZone: CONFIG.timeZone,
+        month: "short",
+        day: "numeric",
+        year: "numeric"
+      }).format(date);
+    } catch {
+      return String(dateString || "");
+    }
+  }
+
+  function formatCalgaryTime(date = new Date()) {
+    try {
+      const formatter = new Intl.DateTimeFormat(CONFIG.locale, {
+        timeZone: CONFIG.timeZone,
+        hour: "numeric",
+        minute: "2-digit",
+        timeZoneName: "short"
+      });
+      return `Calgary time: ${formatter.format(date)}`;
+    } catch {
+      return "Calgary time";
+    }
   }
 
   function getReadingTime(text) {
-    const words = normalizeText(text).split(" ").filter(Boolean).length;
-    return `${Math.max(1, Math.ceil(words / 220))} min read`;
+    const wordCount = normalizeWhitespace(text).split(" ").filter(Boolean).length;
+    return `${Math.max(1, Math.ceil(wordCount / CONFIG.wordsPerMinute))} min read`;
   }
 
   function sanitizePosts(posts) {
@@ -213,56 +289,64 @@ YYC Writer`,
       .map((post, index) => {
         const clean = {
           id: Number(post.id) || index + 1,
-          title: String(post.title || "Untitled Story").trim(),
-          date: String(post.date || "").trim(),
-          topic: String(post.topic || "Local").trim(),
-          excerpt: String(post.excerpt || "").trim(),
+          title: normalizeWhitespace(post.title || "Untitled Story"),
+          date: normalizeWhitespace(post.date || ""),
+          topic: canonicalTopic(post.topic || "Calgary News"),
+          excerpt: normalizeWhitespace(post.excerpt || ""),
           content: String(post.content || "").trim(),
-          image: String(post.image || "").trim(),
+          image: normalizeWhitespace(post.image || ""),
           featured: Boolean(post.featured)
         };
 
-        clean.slug = slugify(`${clean.id}-${clean.title}`);
+        clean.slug = slugify(`${clean.id}-${clean.title}`) || `post-${clean.id}`;
         clean.readingTime = getReadingTime(clean.content);
+        clean.searchText = normalizeText(
+          `${clean.title} ${clean.excerpt} ${clean.content} ${clean.topic} ${clean.date}`
+        );
+
         return clean;
       })
       .filter((post) => post.title && post.content)
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
+      .sort((a, b) => {
+        const aTime = new Date(`${a.date}T12:00:00`).getTime() || 0;
+        const bTime = new Date(`${b.date}T12:00:00`).getTime() || 0;
+        return bTime - aTime;
+      });
+  }
+
+  function cacheDom() {
+    Object.entries(CONFIG.selectors).forEach(([key, selector]) => {
+      dom[key] = qs(selector);
+    });
+  }
+
+  function ensureProgressFill() {
+    if (!dom.progressBar) return null;
+    let fill = qs(".progress-bar__fill", dom.progressBar);
+    if (!fill) {
+      fill = document.createElement("div");
+      fill.className = "progress-bar__fill";
+      dom.progressBar.appendChild(fill);
+    }
+    return fill;
   }
 
   function getPostUrl(post) {
-    const url = new URL(window.location.href);
-    url.hash = post.slug;
-    return url.toString();
+    try {
+      const url = new URL(window.location.href);
+      url.hash = post.slug;
+      return url.toString();
+    } catch {
+      return `${window.location.pathname}${window.location.search}#${post.slug}`;
+    }
   }
 
   function getTopics(posts) {
-    return ["All", ...new Set(posts.map((post) => post.topic).filter(Boolean))];
-  }
-
-  function buildImage(src, alt, wrapperClass) {
-    if (!src) return null;
-
-    const wrapper = document.createElement("div");
-    wrapper.className = wrapperClass;
-
-    const img = document.createElement("img");
-    img.className = "post-image";
-    img.src = src;
-    img.alt = alt || "";
-    img.loading = "lazy";
-    img.decoding = "async";
-
-    img.addEventListener(
-      "error",
-      () => {
-        wrapper.remove();
-      },
-      { once: true }
-    );
-
-    wrapper.appendChild(img);
-    return wrapper;
+    const topics = new Set(["All"]);
+    posts.forEach((post) => {
+      if (post && post.topic) topics.add(post.topic);
+    });
+    return Array.from(topics);
   }
 
   function makeButton(className, text, attrs = {}) {
@@ -272,34 +356,66 @@ YYC Writer`,
     button.textContent = text;
 
     Object.entries(attrs).forEach(([key, value]) => {
-      button.setAttribute(key, value);
+      if (value === undefined || value === null) return;
+      button.setAttribute(key, String(value));
     });
 
     return button;
   }
 
+  function buildImage(src, alt, wrapperClass) {
+    const cleanSrc = normalizeWhitespace(src);
+    if (!cleanSrc) return null;
+
+    const wrapper = document.createElement("div");
+    wrapper.className = wrapperClass;
+
+    const image = document.createElement("img");
+    image.className = "post-image";
+    image.src = cleanSrc;
+    image.alt = alt || "";
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.referrerPolicy = "no-referrer";
+
+    image.addEventListener(
+      "error",
+      () => {
+        wrapper.remove();
+      },
+      { once: true }
+    );
+
+    wrapper.appendChild(image);
+    return wrapper;
+  }
+
   function createReadButton(post) {
     return makeButton("read-btn", "Read full issue →", {
       "data-action": "read",
-      "data-post-id": String(post.id),
+      "data-post-id": post.id,
       "aria-label": `Read ${post.title}`
     });
   }
 
   function createBookmarkButton(post) {
-    const isBookmarked = state.bookmarks.has(post.id);
-    return makeButton(`post-card__action${isBookmarked ? " is-active" : ""}`, isBookmarked ? "Saved" : "Save", {
-      "data-action": "bookmark",
-      "data-post-id": String(post.id),
-      "aria-label": isBookmarked ? "Remove bookmark" : "Save bookmark",
-      "aria-pressed": String(isBookmarked)
-    });
+    const isSaved = state.bookmarks.has(post.id);
+    return makeButton(
+      `post-card__action${isSaved ? " is-active" : ""}`,
+      isSaved ? "Saved" : "Save",
+      {
+        "data-action": "bookmark",
+        "data-post-id": post.id,
+        "aria-pressed": String(isSaved),
+        "aria-label": isSaved ? `Remove saved story: ${post.title}` : `Save story: ${post.title}`
+      }
+    );
   }
 
   function createShareButton(post) {
     return makeButton("post-card__action", "Share", {
       "data-action": "share",
-      "data-post-id": String(post.id),
+      "data-post-id": post.id,
       "aria-label": `Copy share link for ${post.title}`
     });
   }
@@ -316,6 +432,7 @@ YYC Writer`,
     article.className = "featured-story";
 
     const media = buildImage(post.image, post.title, "featured-story__media");
+
     const content = document.createElement("div");
     content.className = "featured-story__content";
 
@@ -329,7 +446,7 @@ YYC Writer`,
 
     const meta = document.createElement("p");
     meta.className = "featured-story__meta";
-    meta.textContent = `${formatDateUS(post.date)} · ${post.readingTime}`;
+    meta.textContent = `${formatDateCA(post.date)} · ${post.readingTime}`;
 
     const excerpt = document.createElement("p");
     excerpt.className = "post-excerpt";
@@ -337,8 +454,8 @@ YYC Writer`,
 
     content.append(topic, title, meta, excerpt, createCardActions(post));
 
-    if (media) article.append(media);
-    article.append(content);
+    if (media) article.appendChild(media);
+    article.appendChild(content);
     return article;
   }
 
@@ -352,13 +469,13 @@ YYC Writer`,
 
     const title = document.createElement("h3");
     title.className = "featured-story__title";
-    title.style.fontSize = "1.3rem";
-    title.style.margin = "0";
     title.textContent = post.title;
+    title.style.margin = "0";
+    title.style.fontSize = "1.3rem";
 
     const meta = document.createElement("p");
     meta.className = "featured-story__meta";
-    meta.textContent = `${formatDateUS(post.date)} · ${post.readingTime}`;
+    meta.textContent = `${formatDateCA(post.date)} · ${post.readingTime}`;
 
     article.append(topic, title, meta, createCardActions(post));
     return article;
@@ -369,6 +486,7 @@ YYC Writer`,
     article.className = "post-card";
 
     const media = buildImage(post.image, post.title, "post-image-wrap");
+
     const body = document.createElement("div");
     body.className = "post-body";
 
@@ -381,7 +499,7 @@ YYC Writer`,
 
     const date = document.createElement("span");
     date.className = "post-date";
-    date.textContent = formatDateUS(post.date);
+    date.textContent = formatDateCA(post.date);
 
     const reading = document.createElement("span");
     reading.className = "post-date";
@@ -399,14 +517,15 @@ YYC Writer`,
 
     body.append(topic, meta, title, excerpt, createCardActions(post));
 
-    if (media) article.append(media);
-    article.append(body);
+    if (media) article.appendChild(media);
+    article.appendChild(body);
+
     return article;
   }
 
   function createEmptyState() {
-    const wrap = document.createElement("div");
-    wrap.className = "empty-state";
+    const wrapper = document.createElement("div");
+    wrapper.className = "empty-state";
 
     const title = document.createElement("h3");
     title.textContent = "No newsletters found";
@@ -414,8 +533,8 @@ YYC Writer`,
     const text = document.createElement("p");
     text.textContent = "Try another search term or choose a different topic.";
 
-    wrap.append(title, text);
-    return wrap;
+    wrapper.append(title, text);
+    return wrapper;
   }
 
   function renderFeatured() {
@@ -423,7 +542,12 @@ YYC Writer`,
     dom.featuredStory.replaceChildren();
 
     const featured = state.posts.find((post) => post.featured) || state.posts[0];
-    if (!featured) return;
+    if (!featured) {
+      const fallback = document.createElement("p");
+      fallback.textContent = "Featured story will appear here.";
+      dom.featuredStory.appendChild(fallback);
+      return;
+    }
 
     dom.featuredStory.appendChild(createFeaturedStory(featured));
   }
@@ -432,9 +556,15 @@ YYC Writer`,
     if (!dom.trendingList) return;
     dom.trendingList.replaceChildren();
 
-    state.posts.slice(0, 3).forEach((post) => {
-      dom.trendingList.appendChild(createTrendingItem(post));
-    });
+    const items = state.posts.slice(0, 3);
+    if (!items.length) {
+      const fallback = document.createElement("p");
+      fallback.textContent = "Trending stories will appear here.";
+      dom.trendingList.appendChild(fallback);
+      return;
+    }
+
+    items.forEach((post) => dom.trendingList.appendChild(createTrendingItem(post)));
   }
 
   function renderTopicFilters() {
@@ -442,15 +572,18 @@ YYC Writer`,
     dom.topicFilters.replaceChildren();
 
     getTopics(state.posts).forEach((topic) => {
+      const isActive = state.activeTopic === topic;
       const button = makeButton(
-        `post-card__action${state.activeTopic === topic ? " is-active" : ""}`,
+        `post-card__action${isActive ? " is-active" : ""}`,
         topic,
         {
           "data-action": "filter",
           "data-topic": topic,
-          "aria-pressed": String(state.activeTopic === topic)
+          "aria-pressed": String(isActive),
+          "aria-label": `Filter by ${topic}`
         }
       );
+
       dom.topicFilters.appendChild(button);
     });
   }
@@ -461,28 +594,31 @@ YYC Writer`,
     state.filteredPosts = state.posts.filter((post) => {
       const topicMatch = state.activeTopic === "All" || post.topic === state.activeTopic;
       if (!topicMatch) return false;
-
       if (!term) return true;
-
-      const haystack = normalizeText(
-        `${post.title} ${post.excerpt} ${post.content} ${post.date} ${post.topic}`
-      );
-
-      return haystack.includes(term);
+      return post.searchText.includes(term);
     });
   }
 
+  function getArchiveMetaText() {
+    const filterText =
+      state.activeTopic === "All" ? "Sorted by newest" : `Filtered by ${state.activeTopic}`;
+    return `${filterText} · ${formatCalgaryTime()}`;
+  }
+
   function renderPosts() {
-    if (!dom.postsGrid || !dom.resultsCount || !dom.archiveMeta) return;
+    if (!dom.postsGrid) return;
 
     filterPosts();
     dom.postsGrid.replaceChildren();
 
-    dom.resultsCount.textContent = `${state.filteredPosts.length} newsletter${state.filteredPosts.length === 1 ? "" : "s"}`;
-    dom.archiveMeta.textContent =
-      state.activeTopic === "All"
-        ? "Sorted by newest"
-        : `Filtered by ${state.activeTopic}`;
+    if (dom.resultsCount) {
+      const count = state.filteredPosts.length;
+      dom.resultsCount.textContent = `${count} newsletter${count === 1 ? "" : "s"}`;
+    }
+
+    if (dom.archiveMeta) {
+      dom.archiveMeta.textContent = getArchiveMetaText();
+    }
 
     if (!state.filteredPosts.length) {
       dom.postsGrid.appendChild(createEmptyState());
@@ -495,19 +631,31 @@ YYC Writer`,
   }
 
   function findPostById(id) {
-    return state.posts.find((post) => post.id === Number(id)) || null;
+    const numericId = Number(id);
+    if (!Number.isFinite(numericId)) return null;
+    return state.posts.find((post) => post.id === numericId) || null;
   }
 
   function findPostBySlug(slug) {
-    return state.posts.find((post) => post.slug === slug) || null;
+    const cleanSlug = normalizeWhitespace(slug);
+    if (!cleanSlug) return null;
+    return state.posts.find((post) => post.slug === cleanSlug) || null;
+  }
+
+  function getFocusableElements(root) {
+    return qsa(CONFIG.focusableSelector, root).filter((element) => {
+      if (!isHTMLElement(element)) return false;
+      if (element.hasAttribute("hidden")) return false;
+      if (element.getAttribute("aria-hidden") === "true") return false;
+      return element.tabIndex >= 0 && (element.offsetParent !== null || element === document.activeElement);
+    });
   }
 
   function openModal(post, updateHash = true) {
     if (!post || !dom.postModal || !dom.modalArticle) return;
 
     state.activePost = post;
-    state.lastFocusedElement =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    state.lastFocusedElement = isHTMLElement(document.activeElement) ? document.activeElement : null;
 
     dom.modalArticle.replaceChildren();
 
@@ -525,7 +673,7 @@ YYC Writer`,
 
     const meta = document.createElement("p");
     meta.className = "modal-date";
-    meta.textContent = `${formatDateUS(post.date)} · ${post.readingTime}`;
+    meta.textContent = `${formatDateCA(post.date)} · ${post.readingTime}`;
 
     const actions = document.createElement("div");
     actions.className = "post-card__actions";
@@ -535,9 +683,7 @@ YYC Writer`,
     dom.modalArticle.appendChild(header);
 
     const image = buildImage(post.image, post.title, "modal-image-wrap");
-    if (image) {
-      dom.modalArticle.appendChild(image);
-    }
+    if (image) dom.modalArticle.appendChild(image);
 
     const body = document.createElement("div");
     body.className = "modal-content-text";
@@ -550,10 +696,15 @@ YYC Writer`,
     document.body.style.overflow = "hidden";
 
     if (updateHash) {
-      history.replaceState(null, "", `#${post.slug}`);
+      try {
+        history.replaceState(null, "", `#${post.slug}`);
+      } catch {
+        window.location.hash = post.slug;
+      }
     }
 
-    dom.closeModalBtn?.focus();
+    const focusTarget = dom.closeModalBtn || title;
+    if (isHTMLElement(focusTarget)) focusTarget.focus();
   }
 
   function closeModal({ resetHash = true } = {}) {
@@ -564,10 +715,14 @@ YYC Writer`,
     document.body.style.overflow = "";
 
     if (resetHash && window.location.hash) {
-      history.replaceState(null, "", window.location.pathname + window.location.search);
+      try {
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+      } catch {
+        window.location.hash = "";
+      }
     }
 
-    if (state.lastFocusedElement) {
+    if (state.lastFocusedElement && typeof state.lastFocusedElement.focus === "function") {
       state.lastFocusedElement.focus();
     }
 
@@ -578,10 +733,7 @@ YYC Writer`,
     if (!state.activePost || !dom.postModal || dom.postModal.classList.contains("hidden")) return;
     if (event.key !== "Tab") return;
 
-    const focusable = qsa(CONFIG.focusableSelector, dom.postModal).filter(
-      (element) => !element.hasAttribute("hidden")
-    );
-
+    const focusable = getFocusableElements(dom.postModal);
     if (!focusable.length) return;
 
     const first = focusable[0];
@@ -590,37 +742,62 @@ YYC Writer`,
     if (event.shiftKey && document.activeElement === first) {
       event.preventDefault();
       last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
+      return;
+    }
+
+    if (!event.shiftKey && document.activeElement === last) {
       event.preventDefault();
       first.focus();
     }
   }
 
   async function copyText(text) {
+    const value = String(text || "");
+    if (!value) return false;
+
     try {
       if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(value);
         return true;
       }
-    } catch {}
+    } catch {
+      /* continue to fallback */
+    }
 
     try {
       const textarea = document.createElement("textarea");
-      textarea.value = text;
+      textarea.value = value;
       textarea.setAttribute("readonly", "");
-      textarea.style.position = "absolute";
+      textarea.style.position = "fixed";
+      textarea.style.top = "-9999px";
       textarea.style.left = "-9999px";
       document.body.appendChild(textarea);
+      textarea.focus();
       textarea.select();
       const copied = document.execCommand("copy");
       textarea.remove();
-      return copied;
+      return Boolean(copied);
     } catch {
       return false;
     }
   }
 
+  function updateArchiveMetaTemporary(message) {
+    if (!dom.archiveMeta) return;
+
+    dom.archiveMeta.textContent = String(message || "");
+    window.clearTimeout(state.statusTimer);
+
+    state.statusTimer = window.setTimeout(() => {
+      if (dom.archiveMeta) {
+        dom.archiveMeta.textContent = getArchiveMetaText();
+      }
+    }, CONFIG.statusResetMs);
+  }
+
   async function handleShare(post) {
+    if (!post) return;
+
     const url = getPostUrl(post);
 
     if (navigator.share) {
@@ -630,188 +807,56 @@ YYC Writer`,
           text: post.excerpt,
           url
         });
+        updateArchiveMetaTemporary("Share dialog opened.");
         return;
-      } catch {}
+      } catch {
+        /* fallback to copy */
+      }
     }
 
     const copied = await copyText(url);
-    updateStatusMessage(copied ? "Story link copied." : "Unable to copy link.");
+    updateArchiveMetaTemporary(copied ? "Story link copied." : "Unable to copy link.");
   }
 
-  function updateBookmarks(postId) {
+  function persistBookmarks() {
+    safeStorage.set(CONFIG.storageKeys.bookmarks, Array.from(state.bookmarks));
+  }
+
+  function toggleBookmark(postId) {
+    if (!Number.isFinite(postId)) return;
+
     if (state.bookmarks.has(postId)) {
       state.bookmarks.delete(postId);
+      updateArchiveMetaTemporary("Story removed from saved items.");
     } else {
       state.bookmarks.add(postId);
+      updateArchiveMetaTemporary("Story saved on this device.");
     }
 
-    safeStorage.set(CONFIG.storageKeys.bookmarks, Array.from(state.bookmarks));
+    persistBookmarks();
     renderFeatured();
     renderTrending();
     renderTopicFilters();
     renderPosts();
 
     if (state.activePost && state.activePost.id === postId) {
-      openModal(state.activePost, false);
+      const freshPost = findPostById(postId);
+      if (freshPost) openModal(freshPost, false);
     }
   }
 
-  function updateStatusMessage(message) {
-    if (!dom.archiveMeta) return;
-    dom.archiveMeta.textContent = message;
-
-    window.clearTimeout(updateStatusMessage._timer);
-    updateStatusMessage._timer = window.setTimeout(() => {
-      dom.archiveMeta.textContent =
-        state.activeTopic === "All"
-          ? "Sorted by newest"
-          : `Filtered by ${state.activeTopic}`;
-    }, 2200);
-  }
-
-  function clearFieldErrors(form) {
-    qsa(".field-error").forEach((node) => {
-      node.hidden = true;
-      node.textContent = "";
-    });
-
-    qsa("input, select", form).forEach((field) => {
-      field.removeAttribute("aria-invalid");
-    });
-  }
-
-  function setFieldError(field, errorId, message) {
-    if (!field) return;
-    field.setAttribute("aria-invalid", "true");
-
-    const errorNode = document.getElementById(errorId);
-    if (errorNode) {
-      errorNode.hidden = false;
-      errorNode.textContent = message;
-    }
-  }
-
-  function validateEmail(value) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-  }
-
-  function validateZip(value) {
-    if (!value) return true;
-    return /^\d{5}(?:-\d{4})?$/.test(value);
-  }
-
-  function showFormStatus(message, type = "") {
-    if (!dom.formStatus) return;
-    dom.formStatus.textContent = message;
-    dom.formStatus.className = `form-status${type ? ` is-${type}` : ""}`;
-  }
-
-  function handleNewsletterSubmit(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    if (!(form instanceof HTMLFormElement)) return;
-
-    clearFieldErrors(form);
-    showFormStatus("");
-
-    const formData = new FormData(form);
-
-    const firstName = String(formData.get("firstName") || "").trim();
-    const email = String(formData.get("email") || "").trim();
-    const zipCode = String(formData.get("zipCode") || "").trim();
-    const stateValue = String(formData.get("state") || "").trim();
-    const consent = formData.get("consent") === "on";
-    const edition = String(formData.get("edition") || "Morning Brief");
-    const topics = formData.getAll("topics").map(String);
-
-    let valid = true;
-
-    const firstNameField = form.querySelector("#firstName");
-    const emailField = form.querySelector("#email");
-    const zipField = form.querySelector("#zipCode");
-    const consentField = form.querySelector("#consent");
-
-    if (firstName && firstName.length < 2) {
-      valid = false;
-      setFieldError(firstNameField, "firstNameError", "Please enter at least 2 characters or leave it blank.");
-    }
-
-    if (!email || !validateEmail(email)) {
-      valid = false;
-      setFieldError(emailField, "emailError", "Please enter a valid email address.");
-    }
-
-    if (!validateZip(zipCode)) {
-      valid = false;
-      setFieldError(zipField, "zipCodeError", "Enter a valid U.S. ZIP code such as 10001 or 10001-1234.");
-    }
-
-    if (!consent) {
-      valid = false;
-      setFieldError(consentField, "consentError", "Please confirm consent to continue.");
-    }
-
-    if (!valid) {
-      showFormStatus("Please correct the highlighted fields.", "error");
+  function restoreBookmarks() {
+    const saved = safeStorage.get(CONFIG.storageKeys.bookmarks, []);
+    if (!Array.isArray(saved)) {
+      state.bookmarks = new Set();
       return;
     }
 
-    const saved = safeStorage.set(CONFIG.storageKeys.signupPrefs, {
-      firstName,
-      email,
-      zipCode,
-      state: stateValue,
-      edition,
-      topics,
-      savedAt: new Date().toISOString()
-    });
-
-    if (!saved) {
-      showFormStatus("Preferences could not be saved in this browser.", "error");
-      return;
-    }
-
-    form.reset();
-    showFormStatus("Thanks. Your preferences were saved locally in this browser.", "success");
-  }
-
-  function applySavedTheme() {
-    const savedTheme = safeStorage.get(CONFIG.storageKeys.theme, "dark");
-    state.theme = savedTheme === "light" ? "light" : "dark";
-    document.documentElement.setAttribute("data-theme", state.theme);
-
-    if (dom.themeToggle) {
-      dom.themeToggle.setAttribute("aria-pressed", String(state.theme === "light"));
-    }
-  }
-
-  function toggleTheme() {
-    state.theme = state.theme === "dark" ? "light" : "dark";
-    document.documentElement.setAttribute("data-theme", state.theme);
-    safeStorage.set(CONFIG.storageKeys.theme, state.theme);
-
-    if (dom.themeToggle) {
-      dom.themeToggle.setAttribute("aria-pressed", String(state.theme === "light"));
-    }
-  }
-
-  function updateProgressBar() {
-    if (!dom.progressBar) return;
-
-    const scrollTop = window.scrollY;
-    const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-    const progress = docHeight > 0 ? Math.min(100, (scrollTop / docHeight) * 100) : 0;
-    dom.progressBar.style.width = `${progress}%`;
-  }
-
-  function updateBackToTop() {
-    if (!dom.backToTopBtn) return;
-    dom.backToTopBtn.classList.toggle("is-visible", window.scrollY > 500);
-  }
-
-  function updateStickyCta() {
-    if (!dom.stickyCta) return;
-    dom.stickyCta.classList.toggle("is-visible", window.scrollY > 700);
+    state.bookmarks = new Set(
+      saved
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value))
+    );
   }
 
   function dismissAnnouncement() {
@@ -827,9 +872,359 @@ YYC Writer`,
     }
   }
 
-  function restoreBookmarks() {
-    const saved = safeStorage.get(CONFIG.storageKeys.bookmarks, []);
-    state.bookmarks = new Set(Array.isArray(saved) ? saved.map(Number) : []);
+  function applyTheme(themeValue) {
+    const theme = themeValue === "light" ? "light" : "dark";
+    state.theme = theme;
+    document.documentElement.setAttribute("data-theme", theme);
+
+    if (dom.themeToggle) {
+      const isLight = theme === "light";
+      dom.themeToggle.setAttribute("aria-pressed", String(isLight));
+      dom.themeToggle.setAttribute(
+        "aria-label",
+        isLight ? "Switch to dark theme" : "Switch to light theme"
+      );
+      const textNode = qs(".theme-toggle__text", dom.themeToggle);
+      if (textNode) {
+        textNode.textContent = isLight ? "Light" : "Dark";
+      }
+    }
+  }
+
+  function restoreTheme() {
+    const stored = safeStorage.get(CONFIG.storageKeys.theme, "dark");
+    applyTheme(stored);
+  }
+
+  function toggleTheme() {
+    const nextTheme = state.theme === "dark" ? "light" : "dark";
+    applyTheme(nextTheme);
+    safeStorage.set(CONFIG.storageKeys.theme, nextTheme);
+  }
+
+  function updateProgressBar() {
+    const fill = ensureProgressFill();
+    if (!fill) return;
+
+    const scrollTop = window.scrollY || window.pageYOffset || 0;
+    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+    const progress = maxScroll > 0 ? Math.min(100, (scrollTop / maxScroll) * 100) : 0;
+    fill.style.width = `${progress}%`;
+  }
+
+  function updateBackToTop() {
+    if (!dom.backToTopBtn) return;
+    dom.backToTopBtn.classList.toggle("is-visible", (window.scrollY || 0) > CONFIG.backToTopOffset);
+  }
+
+  function updateStickyCta() {
+    if (!dom.stickyCta) return;
+    dom.stickyCta.classList.toggle("is-visible", (window.scrollY || 0) > CONFIG.stickyCtaOffset);
+  }
+
+  function runScrollEffects() {
+    state.scrollTicking = false;
+    updateProgressBar();
+    updateBackToTop();
+    updateStickyCta();
+  }
+
+  function onScroll() {
+    if (state.scrollTicking) return;
+    state.scrollTicking = true;
+    window.requestAnimationFrame(runScrollEffects);
+  }
+
+  function clearFieldErrors(form) {
+    if (!(form instanceof HTMLFormElement)) return;
+
+    qsa(".field-error", form).forEach((node) => {
+      node.hidden = true;
+      node.textContent = "";
+    });
+
+    qsa("input, select, textarea", form).forEach((field) => {
+      field.removeAttribute("aria-invalid");
+      field.classList.remove("is-invalid", "is-valid");
+
+      const describedBy = normalizeWhitespace(field.getAttribute("aria-describedby") || "");
+      if (!describedBy) return;
+
+      const filteredIds = describedBy
+        .split(/\s+/)
+        .filter((id) => id && !id.endsWith("Error"));
+
+      if (filteredIds.length) {
+        field.setAttribute("aria-describedby", filteredIds.join(" "));
+      } else {
+        field.removeAttribute("aria-describedby");
+      }
+    });
+  }
+
+  function setFieldError(field, errorId, message) {
+    if (!isHTMLElement(field)) return null;
+
+    field.setAttribute("aria-invalid", "true");
+    field.classList.remove("is-valid");
+    field.classList.add("is-invalid");
+
+    const errorNode = document.getElementById(errorId);
+    if (errorNode) {
+      errorNode.hidden = false;
+      errorNode.textContent = String(message || "");
+
+      const existing = normalizeWhitespace(field.getAttribute("aria-describedby") || "");
+      const ids = new Set(existing ? existing.split(/\s+/) : []);
+      ids.add(errorId);
+      field.setAttribute("aria-describedby", Array.from(ids).join(" "));
+    }
+
+    return field;
+  }
+
+  function setFieldValid(field) {
+    if (!isHTMLElement(field)) return;
+    field.classList.remove("is-invalid");
+    field.classList.add("is-valid");
+    field.removeAttribute("aria-invalid");
+  }
+
+  function validateEmail(value) {
+    const email = normalizeWhitespace(value);
+    if (!email || email.length > 254) return false;
+    return /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(email);
+  }
+
+  function normalizePostalCode(value) {
+    const compact = normalizeText(value).replace(/[^a-z0-9]/g, "").toUpperCase();
+    if (compact.length !== 6) return normalizeWhitespace(value).toUpperCase();
+    return `${compact.slice(0, 3)} ${compact.slice(3)}`;
+  }
+
+  function validateCanadianPostalCode(value) {
+    if (!value) return true;
+    const normalized = normalizePostalCode(value);
+    return /^[ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z]\s?\d[ABCEGHJ-NPRSTV-Z]\d$/i.test(normalized);
+  }
+
+  function showFormStatus(message, type = "") {
+    if (!dom.formStatus) return;
+
+    dom.formStatus.textContent = String(message || "");
+    dom.formStatus.className = "form-status";
+
+    if (type) {
+      dom.formStatus.classList.add(`is-${type}`);
+    }
+
+    dom.formStatus.setAttribute("role", "status");
+    dom.formStatus.setAttribute("aria-live", type === "error" ? "assertive" : "polite");
+  }
+
+  function getFormFields(form) {
+    return {
+      firstName: qs("#firstName", form),
+      email: qs("#email", form),
+      zipCode: qs("#zipCode", form),
+      stateSelect: qs("#stateSelect", form),
+      consent: qs("#consent", form),
+      submitButton: qs('button[type="submit"]', form)
+    };
+  }
+
+  function saveSignupPreferences(preferences) {
+    const safePrefs = {
+      firstName: preferences.firstName || "",
+      postalCode: preferences.postalCode || "",
+      province: preferences.province || "",
+      edition: preferences.edition || "Morning Brief",
+      topics: Array.isArray(preferences.topics) ? preferences.topics.slice(0, 8) : [],
+      confirmedAt: new Date().toISOString()
+    };
+
+    return safeStorage.set(CONFIG.storageKeys.signupPrefs, safePrefs);
+  }
+
+  function restoreSignupPreferences() {
+    if (!dom.newsletterForm) return;
+
+    const saved = safeStorage.get(CONFIG.storageKeys.signupPrefs, null);
+    if (!saved || typeof saved !== "object") return;
+
+    const fields = getFormFields(dom.newsletterForm);
+
+    if (fields.firstName && typeof saved.firstName === "string") {
+      fields.firstName.value = saved.firstName;
+    }
+
+    if (fields.zipCode && typeof saved.postalCode === "string") {
+      fields.zipCode.value = saved.postalCode;
+    }
+
+    if (fields.stateSelect && typeof saved.province === "string") {
+      const matchingOption = Array.from(fields.stateSelect.options || []).find(
+        (option) => normalizeText(option.value || option.textContent) === normalizeText(saved.province)
+      );
+      if (matchingOption) {
+        fields.stateSelect.value = matchingOption.value;
+      }
+    }
+
+    if (dom.newsletterForm && Array.isArray(saved.topics)) {
+      qsa('input[name="topics"]', dom.newsletterForm).forEach((checkbox) => {
+        if (checkbox instanceof HTMLInputElement) {
+          checkbox.checked = saved.topics.includes(checkbox.value);
+        }
+      });
+    }
+
+    if (dom.newsletterForm && typeof saved.edition === "string") {
+      const editionField = qs(
+        `input[name="edition"][value="${CSS && CSS.escape ? CSS.escape(saved.edition) : saved.edition}"]`,
+        dom.newsletterForm
+      );
+      if (editionField instanceof HTMLInputElement) {
+        editionField.checked = true;
+      }
+    }
+  }
+
+  function getFriendlyEditionName(value) {
+    return value === "Evening Roundup" ? "Evening Roundup" : "Morning Brief";
+  }
+
+  function lockSubmitButton(button) {
+    if (!(button instanceof HTMLButtonElement)) return;
+    button.disabled = true;
+    button.setAttribute("aria-disabled", "true");
+  }
+
+  function unlockSubmitButton(button) {
+    if (!(button instanceof HTMLButtonElement)) return;
+    button.disabled = false;
+    button.setAttribute("aria-disabled", "false");
+  }
+
+  function handleNewsletterSubmit(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    if (!(form instanceof HTMLFormElement)) return;
+
+    const fields = getFormFields(form);
+    clearFieldErrors(form);
+    showFormStatus("");
+
+    const formData = new FormData(form);
+
+    const firstName = normalizeWhitespace(formData.get("firstName") || "");
+    const email = normalizeWhitespace(formData.get("email") || "");
+    const postalCodeRaw = normalizeWhitespace(formData.get("zipCode") || "");
+    const postalCode = normalizePostalCode(postalCodeRaw);
+    const province = normalizeWhitespace(formData.get("state") || "");
+    const edition = getFriendlyEditionName(String(formData.get("edition") || "Morning Brief"));
+    const topics = formData.getAll("topics").map((value) => normalizeWhitespace(value)).filter(Boolean);
+    const consent = formData.get("consent") === "on";
+
+    let firstInvalidField = null;
+    let valid = true;
+
+    if (fields.firstName && firstName) {
+      if (firstName.length < 2 || firstName.length > 50 || /[^a-zA-ZÀ-ÿ' -]/.test(firstName)) {
+        valid = false;
+        firstInvalidField =
+          firstInvalidField ||
+          setFieldError(
+            fields.firstName,
+            "firstNameError",
+            "Please enter a valid first name, or leave it blank."
+          );
+      } else {
+        setFieldValid(fields.firstName);
+      }
+    }
+
+    if (!email || !validateEmail(email)) {
+      valid = false;
+      firstInvalidField =
+        firstInvalidField ||
+        setFieldError(fields.email, "emailError", "Please enter a valid email address.");
+    } else {
+      setFieldValid(fields.email);
+    }
+
+    if (postalCodeRaw) {
+      if (!validateCanadianPostalCode(postalCodeRaw)) {
+        valid = false;
+        firstInvalidField =
+          firstInvalidField ||
+          setFieldError(
+            fields.zipCode,
+            "zipCodeError",
+            "Please enter a valid Canadian postal code, like T2P 1J9."
+          );
+      } else {
+        if (fields.zipCode instanceof HTMLInputElement) {
+          fields.zipCode.value = postalCode;
+        }
+        setFieldValid(fields.zipCode);
+      }
+    }
+
+    if (!consent) {
+      valid = false;
+      firstInvalidField =
+        firstInvalidField ||
+        setFieldError(
+          fields.consent,
+          "consentError",
+          "Please confirm that you agree to receive newsletter updates."
+        );
+    }
+
+    if (!valid) {
+      showFormStatus("Please correct the highlighted fields and try again.", "error");
+      if (firstInvalidField && typeof firstInvalidField.focus === "function") {
+        firstInvalidField.focus();
+      }
+      return;
+    }
+
+    lockSubmitButton(fields.submitButton);
+
+    const saved = saveSignupPreferences({
+      firstName,
+      postalCode,
+      province,
+      edition,
+      topics
+    });
+
+    if (!saved) {
+      unlockSubmitButton(fields.submitButton);
+      showFormStatus(
+        "Your preferences could not be saved in this browser. Please try again.",
+        "error"
+      );
+      return;
+    }
+
+    form.reset();
+
+    if (fields.zipCode instanceof HTMLInputElement) {
+      fields.zipCode.value = "";
+    }
+
+    showFormStatus(
+      `${firstName ? `Thanks, ${firstName}. ` : "Thanks. "}You’re set for the ${edition}. Preferences were saved locally on this device.`,
+      "success"
+    );
+
+    window.clearTimeout(state.submitTimer);
+    state.submitTimer = window.setTimeout(() => {
+      unlockSubmitButton(fields.submitButton);
+    }, CONFIG.submitCooldownMs);
   }
 
   function handleHashOpen() {
@@ -860,7 +1255,7 @@ YYC Writer`,
     }
 
     const postId = Number(actionEl.getAttribute("data-post-id"));
-    if (!postId) return;
+    if (!Number.isFinite(postId)) return;
 
     const post = findPostById(postId);
     if (!post) return;
@@ -871,12 +1266,12 @@ YYC Writer`,
     }
 
     if (action === "bookmark") {
-      updateBookmarks(post.id);
+      toggleBookmark(post.id);
       return;
     }
 
     if (action === "share") {
-      handleShare(post);
+      void handleShare(post);
     }
   }
 
@@ -884,66 +1279,111 @@ YYC Writer`,
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
 
-    state.searchTerm = target.value || "";
-    renderPosts();
+    const nextValue = target.value || "";
+    window.clearTimeout(state.searchTimer);
+
+    state.searchTimer = window.setTimeout(() => {
+      state.searchTerm = nextValue;
+      renderPosts();
+    }, CONFIG.searchDebounceMs);
+  }
+
+  function handlePostalCodeInput(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+
+    const raw = target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+    if (raw.length > 3) {
+      target.value = `${raw.slice(0, 3)} ${raw.slice(3)}`;
+    } else {
+      target.value = raw;
+    }
+  }
+
+  function handleKeydown(event) {
+    if (event.key === "Escape" && state.activePost) {
+      closeModal();
+      return;
+    }
+
+    trapModalFocus(event);
+  }
+
+  function handleHashChange() {
+    const slug = window.location.hash.replace(/^#/, "");
+
+    if (!slug && state.activePost) {
+      closeModal({ resetHash: false });
+      return;
+    }
+
+    if (slug) {
+      const post = findPostBySlug(slug);
+      if (post) openModal(post, false);
+    }
+  }
+
+  function scrollToTop() {
+    const behavior = state.reducedMotion ? "auto" : "smooth";
+    window.scrollTo({ top: 0, behavior });
   }
 
   function bindEvents() {
-    document.addEventListener("click", handleDocumentClick);
+    if (state.listenersAbortController) {
+      state.listenersAbortController.abort();
+    }
 
-    dom.searchInput?.addEventListener("input", handleSearchInput);
-    dom.closeModalBtn?.addEventListener("click", () => closeModal());
-    dom.modalOverlay?.addEventListener("click", () => closeModal());
-    dom.themeToggle?.addEventListener("click", toggleTheme);
-    dom.backToTopBtn?.addEventListener("click", () => {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    });
-    dom.announcementCloseBtn?.addEventListener("click", dismissAnnouncement);
-    dom.newsletterForm?.addEventListener("submit", handleNewsletterSubmit);
+    state.listenersAbortController = new AbortController();
+    const { signal } = state.listenersAbortController;
 
+    document.addEventListener("click", handleDocumentClick, { signal });
+
+    dom.searchInput?.addEventListener("input", handleSearchInput, { signal });
+    dom.closeModalBtn?.addEventListener("click", () => closeModal(), { signal });
+    dom.modalOverlay?.addEventListener("click", () => closeModal(), { signal });
+    dom.themeToggle?.addEventListener("click", toggleTheme, { signal });
+    dom.backToTopBtn?.addEventListener("click", scrollToTop, { signal });
+    dom.announcementCloseBtn?.addEventListener("click", dismissAnnouncement, { signal });
+    dom.newsletterForm?.addEventListener("submit", handleNewsletterSubmit, { signal });
+
+    const zipField = dom.newsletterForm ? qs("#zipCode", dom.newsletterForm) : null;
+    zipField?.addEventListener("input", handlePostalCodeInput, { signal });
+
+    window.addEventListener("scroll", onScroll, { passive: true, signal });
+    window.addEventListener("keydown", handleKeydown, { signal });
+    window.addEventListener("hashchange", handleHashChange, { signal });
     window.addEventListener(
-      "scroll",
+      "resize",
       () => {
-        updateProgressBar();
-        updateBackToTop();
-        updateStickyCta();
+        onScroll();
       },
-      { passive: true }
+      { passive: true, signal }
     );
-
-    window.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && state.activePost) {
-        closeModal();
-      }
-      trapModalFocus(event);
-    });
-
-    window.addEventListener("hashchange", () => {
-      const hash = window.location.hash.replace(/^#/, "");
-      if (!hash && state.activePost) {
-        closeModal({ resetHash: false });
-        return;
-      }
-      handleHashOpen();
-    });
   }
 
   function registerServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
 
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js").catch(() => {
-        /* no-op */
-      });
-    });
+    window.addEventListener(
+      "load",
+      () => {
+        navigator.serviceWorker.register("./sw.js").catch(() => {
+          /* ignore safely */
+        });
+      },
+      { once: true }
+    );
   }
 
   function init() {
     cacheDom();
-    state.posts = sanitizePosts(rawPosts);
+    ensureProgressFill();
+
+    state.posts = sanitizePosts(RAW_POSTS);
     restoreBookmarks();
     restoreAnnouncementState();
-    applySavedTheme();
+    restoreTheme();
+    restoreSignupPreferences();
 
     renderFeatured();
     renderTrending();
@@ -958,5 +1398,9 @@ YYC Writer`,
     registerServiceWorker();
   }
 
-  init();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init, { once: true });
+  } else {
+    init();
+  }
 })();
