@@ -9,7 +9,7 @@
 
   <meta
     name="description"
-    content="YYC Daily is a Calgary focused newsletter platform sharing local perspectives on culture, city life, cannabis, technology, and everyday moments that shape the city."
+    content="YYC Daily is a Calgary-focused newsletter platform sharing local perspectives on culture, city life, cannabis, technology, and everyday moments that shape the city."
   />
   <meta
     name="keywords"
@@ -21,7 +21,7 @@
   <meta property="og:title" content="YYC Daily | Calgary Perspectives and Newsletters" />
   <meta
     property="og:description"
-    content="A calm editorial style newsletter space for Calgary stories, perspectives, and city life."
+    content="A calm editorial-style newsletter space for Calgary stories, perspectives, and city life."
   />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://sainiparv2k26-spec.github.io/Newsletters.leonZen/" />
@@ -73,7 +73,7 @@
         <div class="brand-badge" aria-hidden="true">YYC</div>
         <div class="brand-copy">
           <p class="brand-copy__eyebrow">Independent local newsletter</p>
-          <h1>YYC Daily</h1>
+          <p class="brand-title">YYC Daily</p>
           <p>Calgary newsletters, perspectives, and city culture</p>
         </div>
       </a>
@@ -105,7 +105,7 @@
       <div class="container hero-grid">
         <div class="hero-content">
           <span class="eyebrow">Calgary newsletter</span>
-          <h2 id="heroTitle">Local perspective, city culture, and thoughtful writing from YYC.</h2>
+          <h1 id="heroTitle">Local perspective, city culture, and thoughtful writing from YYC.</h1>
           <p class="hero-text">
             YYC Daily is a calm public newsletter platform built around clear ideas,
             strong local perspective, and stories that feel connected to Calgary as
@@ -125,8 +125,8 @@
         </div>
 
         <aside class="hero-panel" aria-labelledby="heroPanelTitle">
-          <div class="hero-panel-line"></div>
-          <h3 id="heroPanelTitle">What you will find here</h3>
+          <div class="hero-panel-line" aria-hidden="true"></div>
+          <h2 id="heroPanelTitle">What you will find here</h2>
           <ul>
             <li>Calgary street life and city mood</li>
             <li>Cannabis, culture, and local trends</li>
@@ -142,7 +142,7 @@
         <div class="section-head section-head--left">
           <div>
             <span class="eyebrow">About</span>
-            <h2 id="aboutTitle">A Calgary centered reading space</h2>
+            <h2 id="aboutTitle">A Calgary-centered reading space</h2>
           </div>
         </div>
 
@@ -161,7 +161,7 @@
             </p>
             <p>
               This site is intentionally simple. No clutter. No noise. Just a clean place
-              to publish thoughtful newsletter style writing that feels current, local, and
+              to publish thoughtful newsletter-style writing that feels current, local, and
               easy to return to.
             </p>
           </div>
@@ -222,7 +222,9 @@
           <p class="section-note">A highlighted issue selected from the latest writing.</p>
         </div>
 
-        <div id="featuredStory" class="featured-story" aria-live="polite"></div>
+        <div id="featuredStory" class="featured-story" aria-live="polite">
+          <p>Featured story will appear here.</p>
+        </div>
       </div>
     </section>
 
@@ -236,7 +238,9 @@
           <p class="section-note">A quick look at recent issues readers may want to explore next.</p>
         </div>
 
-        <div id="trendingList" class="trending-list" aria-live="polite"></div>
+        <div id="trendingList" class="trending-list" aria-live="polite">
+          <p>Trending stories will appear here.</p>
+        </div>
       </div>
     </section>
 
@@ -277,7 +281,9 @@
           <p id="archiveMeta">Sorted by newest</p>
         </div>
 
-        <div id="postsGrid" class="posts-grid"></div>
+        <div id="postsGrid" class="posts-grid">
+          <p>Newsletter archive will appear here.</p>
+        </div>
       </div>
     </section>
 
@@ -300,7 +306,7 @@
               <li>Thoughtful local perspective without clutter</li>
               <li>Culture, city life, cannabis, and technology coverage</li>
               <li>Simple weekly rhythm with optional edition preferences</li>
-              <li>Privacy aware design with no hidden tracking in this demo</li>
+              <li>Privacy-aware design with no hidden tracking in this demo</li>
             </ul>
           </div>
 
@@ -321,69 +327,31 @@
               </div>
 
               <div class="field">
-                <label for="zipCode">ZIP code <span class="field-optional">Optional</span></label>
-                <input id="zipCode" name="zipCode" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="10" />
-                <p class="field-help">Useful for future local edition personalization.</p>
-                <p class="field-error" id="zipCodeError" hidden></p>
+                <label for="postalCode">Postal code <span class="field-optional">Optional</span></label>
+                <input id="postalCode" name="postalCode" type="text" autocomplete="postal-code" maxlength="7" />
+                <p class="field-help">Useful for future Calgary edition personalization.</p>
+                <p class="field-error" id="postalCodeError" hidden></p>
               </div>
 
               <div class="field">
-                <label for="stateSelect">State <span class="field-optional">Optional</span></label>
-                <select id="stateSelect" name="state">
-                  <option value="">Select a state</option>
-                  <option>Alabama</option>
-                  <option>Alaska</option>
-                  <option>Arizona</option>
-                  <option>Arkansas</option>
-                  <option>California</option>
-                  <option>Colorado</option>
-                  <option>Connecticut</option>
-                  <option>Delaware</option>
-                  <option>District of Columbia</option>
-                  <option>Florida</option>
-                  <option>Georgia</option>
-                  <option>Hawaii</option>
-                  <option>Idaho</option>
-                  <option>Illinois</option>
-                  <option>Indiana</option>
-                  <option>Iowa</option>
-                  <option>Kansas</option>
-                  <option>Kentucky</option>
-                  <option>Louisiana</option>
-                  <option>Maine</option>
-                  <option>Maryland</option>
-                  <option>Massachusetts</option>
-                  <option>Michigan</option>
-                  <option>Minnesota</option>
-                  <option>Mississippi</option>
-                  <option>Missouri</option>
-                  <option>Montana</option>
-                  <option>Nebraska</option>
-                  <option>Nevada</option>
-                  <option>New Hampshire</option>
-                  <option>New Jersey</option>
-                  <option>New Mexico</option>
-                  <option>New York</option>
-                  <option>North Carolina</option>
-                  <option>North Dakota</option>
-                  <option>Ohio</option>
-                  <option>Oklahoma</option>
-                  <option>Oregon</option>
-                  <option>Pennsylvania</option>
-                  <option>Rhode Island</option>
-                  <option>South Carolina</option>
-                  <option>South Dakota</option>
-                  <option>Tennessee</option>
-                  <option>Texas</option>
-                  <option>Utah</option>
-                  <option>Vermont</option>
-                  <option>Virginia</option>
-                  <option>Washington</option>
-                  <option>West Virginia</option>
-                  <option>Wisconsin</option>
-                  <option>Wyoming</option>
+                <label for="provinceSelect">Province <span class="field-optional">Optional</span></label>
+                <select id="provinceSelect" name="province">
+                  <option value="">Select a province</option>
+                  <option>Alberta</option>
+                  <option>British Columbia</option>
+                  <option>Manitoba</option>
+                  <option>New Brunswick</option>
+                  <option>Newfoundland and Labrador</option>
+                  <option>Northwest Territories</option>
+                  <option>Nova Scotia</option>
+                  <option>Nunavut</option>
+                  <option>Ontario</option>
+                  <option>Prince Edward Island</option>
+                  <option>Quebec</option>
+                  <option>Saskatchewan</option>
+                  <option>Yukon</option>
                 </select>
-                <p class="field-error" id="stateError" hidden></p>
+                <p class="field-error" id="provinceError" hidden></p>
               </div>
             </div>
 
@@ -420,7 +388,7 @@
             <div class="form-actions">
               <button class="btn btn-primary" type="submit">Subscribe</button>
               <p class="form-trust">
-                No payment. No backend submission in this demo. This is a privacy aware frontend placeholder.
+                No payment. No backend submission in this demo. This is a privacy-aware frontend placeholder.
               </p>
             </div>
 
@@ -462,7 +430,12 @@
         ×
       </button>
 
-      <article id="modalArticle"></article>
+      <article id="modalArticle">
+        <h2 id="modalTitle">Article title</h2>
+        <div id="modalBody">
+          <p>Article content will appear here.</p>
+        </div>
+      </article>
     </div>
   </div>
 
@@ -479,7 +452,7 @@
         <a href="#about">About</a>
         <a href="#signup">Subscribe</a>
         <a href="#newsletters">Archive</a>
-        <a href="mailto:hello@example.com">Contact</a>
+        <a href="mailto:hello@yycdaily.ca">Contact</a>
         <a href="#signup">Unsubscribe help</a>
       </nav>
     </div>
@@ -489,6 +462,12 @@
       <p>Written by Leon Zen</p>
     </div>
   </footer>
+
+  <noscript>
+    <div class="container" style="padding: 1rem;">
+      This site works best with JavaScript enabled because the featured stories and archive are rendered dynamically.
+    </div>
+  </noscript>
 
   <script src="error-handler.js?v=1"></script>
   <script src="script.js?v=6"></script>
